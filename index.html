@@ -26,14 +26,15 @@ button:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(0,0,0,.25)}
 #lv small{display:block;font-weight:700;font-size:13px;opacity:.9}
 </style></head><body>
 <canvas id="c"></canvas>
+<div id="tint" style="position:fixed;inset:0;z-index:5;background:#ff0000;opacity:0;pointer-events:none"></div>
 <div id="panel"><div id="staff"></div><div id="keys"></div></div>
 <div class="ov" id="start"><div class="card"><h1>🧱 Brick Blasters! 💥</h1>
 <p>Read the <b>bass clef</b> note, tap the matching piano key and win a ball! Wrong key? You lose one!</p>
 <p>⬅️ ➡️ to aim &nbsp;·&nbsp; <b>SPACE</b> to fire<br>Smash all of the computer's bricks before it smashes yours!</p>
 <div id="lv">
-<button data-l="1" style="background:var(--mint)">Level 1<small>Space notes: A C E G</small></button>
-<button data-l="2" style="background:var(--sky)">Level 2<small>Line notes: G B D F A</small></button>
-<button data-l="3" style="background:var(--pink)">Level 3<small>Lines + spaces together!</small></button></div></div></div>
+<button data-l="1" style="background:var(--mint)">Level 1<small>Space notes</small></button>
+<button data-l="2" style="background:var(--sky)">Level 2<small>Lines notes</small></button>
+<button data-l="3" style="background:var(--pink)">Level 3<small>Spaces and lines together!</small></button></div></div></div>
 <div class="ov" id="res" style="display:none"><div class="card"><h2 id="rt"></h2><p id="rl"></p>
 <button style="background:var(--mint)" onclick="startLevel(level)">Play again</button>
 <button style="background:var(--grape)" onclick="goHome()">Home</button></div></div>
@@ -48,11 +49,18 @@ const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 let W,S,midX,innerW=0,left0,bw,R,cw,ch,dpr,ph;
 let phase='home',level=1,pBalls=0,pa=90,ca=270,fireCD=0,shake=0,raceT=0,cd=10,lastN=11,endT=0,winner=null,shots=0;
 let pMood='',pMoodT=0,cMoodT=0,aliveTop=50,aliveBot=50,target=null,noteName='',pool=[];
+let heat=0,gt=0,hitTimes=[],lastHit=-99;
 let bricks=[],grid={top:[],bot:[]},ballList=[],expl=[],pops=[];
 const keys={};
 // ---------- assets ----------
 const frames=[];for(let i=1;i<=7;i++){const im=new Image();im.src='frame'+i+'.png';frames.push(im)}
 const boom=new Audio('explosion.wav');boom.preload='auto';
+const fanfare=new Audio('Fanfare.mp3'),loser=new Audio('Loser.mp3');
+function playResult(win){
+  const a=win?fanfare:loser;
+  const jingle=()=>(win?[523,659,784,1047]:[330,262,220,165]).forEach((f,i)=>beep(f,.4,'triangle',.25,i*.18));
+  try{a.currentTime=0;a.play().catch(jingle)}catch(e){jingle()}
+}
 function playBoom(){try{const a=boom.cloneNode();a.volume=.7;a.play().catch(()=>{})}catch(e){}}
 let AC;
 function beep(f,d,type='sine',v=.2,when=0){
@@ -98,8 +106,12 @@ function explode(k){
   pop(x,y-10,BOOMS[Math.random()*BOOMS.length|0],POPC[Math.random()*POPC.length|0]);
   beep(90,.25,'sawtooth',.12);
 }
-function destroy(k){
+function destroy(k,owner){
   k.alive=false;if(k.side==='top')aliveTop--;else aliveBot--;explode(k);
+  if(owner==='p'){ // combo: 3+ hits within 1.5s heats up the screen
+    hitTimes.push(gt);hitTimes=hitTimes.filter(t=>t>gt-1.5);lastHit=gt;
+    if(hitTimes.length>=3)heat=Math.min(1,heat+.12);
+  }
 }
 // ---------- balls ----------
 function fire(owner,angle,tgt){
@@ -118,7 +130,7 @@ function hitBricks(b){
       const rx=left0+c*bw,ry=y0+r*BH;
       let px=clamp(b.x,rx,rx+bw),py=clamp(b.y,ry,ry+BH),dx=b.x-px,dy=b.y-py,d2=dx*dx+dy*dy;
       if(d2>=R*R)continue;
-      if((b.owner==='p')===(side==='top')){destroy(k);return k}
+      if((b.owner==='p')===(side==='top')){destroy(k,b.owner);return k}
       if(d2<1e-9){ // centre inside brick: push out through nearest face
         const l=b.x-rx,rg=rx+bw-b.x,u=b.y-ry,dn=ry+BH-b.y,m=Math.min(l,rg,u,dn);
         if(m===l){px=rx;dx=-1;dy=0}else if(m===rg){px=rx+bw;dx=1;dy=0}else if(m===u){py=ry;dx=0;dy=-1}else{py=ry+BH;dx=0;dy=1}
@@ -190,7 +202,7 @@ function press(name,k){
 }
 const WHITE=['F2','G2','A2','B2','C3','D3','E3','F3','G3','A3','B3','C4'],BLACK={0:'F#2',1:'G#2',2:'A#2',4:'C#3',5:'D#3',7:'F#3',8:'G#3',9:'A#3'};
 function mkKey(name,cls,left,w,h){const k=document.createElement('div');k.className='pk '+cls;k.style.cssText='left:'+left+'%;width:'+w+'%;height:'+h+'%';k.addEventListener('pointerdown',e=>{e.preventDefault();press(name,k)});$('keys').appendChild(k);return k}
-WHITE.forEach((n,i)=>{const k=mkKey(n,'w',i*100/12,100/12,100);if(n==='C4'||n==='C3'){const l=document.createElement('span');l.textContent=n==='C4'?'MC':'C3';k.appendChild(l)}});
+WHITE.forEach((n,i)=>{const k=mkKey(n,'w',i*100/12,100/12,100);if(n==='C4'){const l=document.createElement('span');l.textContent='MC';k.appendChild(l)}});
 Object.keys(BLACK).forEach(i=>mkKey(BLACK[i],'b',(+i+1)*100/12-2.5,5,62));
 // ---------- game flow ----------
 document.querySelectorAll('#lv button').forEach(b=>b.onclick=()=>{
@@ -199,11 +211,11 @@ document.querySelectorAll('#lv button').forEach(b=>b.onclick=()=>{
 });
 function startLevel(l){
   level=l;pool=POOLS[l];makeBricks();ballList=[];expl=[];pops=[];
-  pBalls=0;pa=90;ca=270;fireCD=0;shake=0;raceT=0;cd=10;lastN=11;endT=0;winner=null;shots=0;target=null;pMoodT=cMoodT=0;noteName='';
+  heat=0;hitTimes=[];lastHit=-99;pBalls=0;pa=90;ca=270;fireCD=0;shake=0;raceT=0;cd=10;lastN=11;endT=0;winner=null;shots=0;target=null;pMoodT=cMoodT=0;noteName='';
   $('start').style.display='none';$('res').style.display='none';
   phase='count';newNote();
 }
-function goHome(){phase='home';makeBricks();ballList=[];expl=[];pops=[];$('res').style.display='none';$('start').style.display='flex';$('staff').innerHTML=''}
+function goHome(){phase='home';heat=0;hitTimes=[];makeBricks();ballList=[];expl=[];pops=[];$('res').style.display='none';$('start').style.display='flex';$('staff').innerHTML=''}
 function tryFire(){
   if(fireCD>0)return;
   if(phase==='count'){pop(midX,420,'Wait for GO!','#ff6f00',30);fireCD=.6;return}
@@ -218,6 +230,9 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>{keys[e.code]=false});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false});
 function update(dt){
+  gt+=dt;
+  if(gt-lastHit>1&&heat>0)heat=Math.max(0,heat-.25*dt);
+  $('tint').style.opacity=heat*.5;
   shake=Math.max(0,shake-dt);pMoodT-=dt;cMoodT-=dt;fireCD-=dt;
   pops.forEach(p=>{p.t+=dt;p.y-=55*dt});pops=pops.filter(p=>p.t<1.1);
   expl.forEach(x=>x.t+=dt);expl=expl.filter(x=>x.t<.6);
@@ -237,7 +252,7 @@ function update(dt){
   for(let i=ballList.length-1;i>=0;i--)if(stepBall(ballList[i],dt))ballList.splice(i,1);
   if(phase==='race'&&(aliveTop===0||aliveBot===0)){
     winner=aliveTop===0?'p':'c';phase='ending';endT=0;
-    (winner==='p'?[523,659,784,1047]:[330,262,220,165]).forEach((f,i)=>beep(f,.4,'triangle',.25,i*.18));
+    playResult(winner==='p');
   }
   if(phase==='ending'){endT+=dt;if(endT>1.4)showResult()}
 }
@@ -271,7 +286,7 @@ function cannon(x,y,ang,col,angry){
 const DECO=[['⭐',70,150],['🍭',520,110],['🌈',60,700],['🎈',530,690],['🍬',300,40]];
 function draw(t){
   ctx.setTransform(dpr*S,0,0,dpr*S,0,0);
-  const m=shake>0?10*shake/.25:0;
+  const m=(shake>0?10*shake/.25:0)+heat*14;
   ctx.save();ctx.translate((Math.random()*2-1)*m,(Math.random()*2-1)*m);
   const sw=W/3;
   let g=ctx.createLinearGradient(0,0,0,WH);g.addColorStop(0,'#c8f7e2');g.addColorStop(1,'#8fe8c8');ctx.fillStyle=g;ctx.fillRect(-30,-30,sw+30,WH+60);
