@@ -52,7 +52,7 @@ let bricks=[],grid={top:[],bot:[]},ballList=[],expl=[],pops=[];
 const keys={};
 // ---------- assets ----------
 const frames=[];for(let i=1;i<=7;i++){const im=new Image();im.src='frame'+i+'.png';frames.push(im)}
-const boom=new Audio('explosion.mp3');boom.preload='auto';
+const boom=new Audio('explosion.wav');boom.preload='auto';
 function playBoom(){try{const a=boom.cloneNode();a.volume=.7;a.play().catch(()=>{})}catch(e){}}
 let AC;
 function beep(f,d,type='sine',v=.2,when=0){
